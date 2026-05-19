@@ -3,12 +3,12 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindCSS()],
   server: {
-    port: 5173,
-    proxy: {
-      '/api': 'http://localhost:8080',
-      '/ws': { target: 'http://localhost:8081', ws: true }
-    }
+    proxy: { '/api': 'http://localhost:8080' }
+  },
+  // For production, API calls go to env variable
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || '')
   }
 })
