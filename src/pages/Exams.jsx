@@ -505,7 +505,7 @@ function ManageExams() {
                 <tbody>
                   {marksStudents.map(s => (
                     <tr key={s.id} className="border-b border-gray-100">
-                      <td className="px-4 py-3">{s.rollNo}</td>
+                      <td className="px-4 py-3">{s.studentUniqueId && <span className="font-mono text-xs text-gray-400 mr-1">{s.studentUniqueId} ·</span>}{s.rollNo}</td>
                       <td className="px-4 py-3 font-medium">{s.name}</td>
                       <td className="px-4 py-3 text-center"><input type="number" min="0" max={maxMarks} value={marksData[s.id] || ''} onChange={e => setMarksData({...marksData, [s.id]: e.target.value})} className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm" /></td>
                     </tr>

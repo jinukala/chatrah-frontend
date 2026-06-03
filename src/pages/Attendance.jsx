@@ -122,7 +122,8 @@ function MarkAttendance() {
   useEffect(() => {
     if (!selectedClass) { setStudents([]); return; }
     setLoading(true); setSaved(false);
-    api.get(`/classes/${selectedClass}/students`).then(r => {
+    // Use large size to load ALL students in a class (classes rarely exceed 100)
+    api.get(`/students?classId=${selectedClass}&page=0&size=200&sortBy=rollNo&sortDir=asc`).then(r => {
       setStudents(r.data);
       const att = {};
       r.data.forEach(s => att[s.id] = true);
@@ -201,8 +202,8 @@ function MarkAttendance() {
               <div className="flex items-center justify-between px-4 py-3 bg-[#7b1113]/5 border-b">
                 <span className="text-sm text-gray-600 font-medium">{students.length} Students</span>
                 <div className="flex gap-2">
-                  <button onClick={() => markAll(true)} className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium hover:bg-green-200">All Present</button>
-                  <button onClick={() => markAll(false)} className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200">All Absent</button>
+                  <button onClick={() => markAll(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 active:scale-95 transition-all shadow">✓ All Present</button>
+                  <button onClick={() => markAll(false)} className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 active:scale-95 transition-all shadow">✗ All Absent</button>
                 </div>
               </div>
               <table className="w-full text-sm">
@@ -216,12 +217,22 @@ function MarkAttendance() {
                 <tbody>
                   {students.map(s => (
                     <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-600">{s.rollNo}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        <span className="font-mono text-xs text-gray-400">{s.studentUniqueId || '—'}</span>
+                        <span className="mx-1 text-gray-300">·</span>{s.rollNo}
+                      </td>
                       <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
                       <td className="px-4 py-3 text-center">
-                        <button onClick={() => toggle(s.id)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${attendance[s.id] ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {attendance[s.id] ? <><CheckCircle className="w-3.5 h-3.5" />Present</> : <><XCircle className="w-3.5 h-3.5" />Absent</>}
-                        </button>
+                        <div className="inline-flex rounded-lg overflow-hidden border border-gray-200">
+                          <button onClick={() => { setSaved(false); setAttendance(prev => ({ ...prev, [s.id]: true })); }}
+                            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-bold transition-all ${attendance[s.id] ? 'bg-green-600 text-white' : 'bg-white text-gray-400 hover:bg-green-50'}`}>
+                            <CheckCircle className="w-3.5 h-3.5" />Present
+                          </button>
+                          <button onClick={() => { setSaved(false); setAttendance(prev => ({ ...prev, [s.id]: false })); }}
+                            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-bold border-l border-gray-200 transition-all ${!attendance[s.id] ? 'bg-red-600 text-white' : 'bg-white text-gray-400 hover:bg-red-50'}`}>
+                            <XCircle className="w-3.5 h-3.5" />Absent
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -231,8 +242,40 @@ function MarkAttendance() {
                 <button onClick={handleSubmit} disabled={submitting} className="px-6 py-2.5 bg-[#7b1113] text-white rounded-lg text-sm font-medium hover:bg-[#5c0d0f] disabled:opacity-50 flex items-center gap-2">
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}Save Attendance
                 </button>
-                {saved && <span className="text-green-600 text-sm font-medium flex items-center gap-1"><CheckCircle className="w-4 h-4" />Saved!</span>}
               </div>
+
+              {saved && (() => {
+                const presentList = students.filter(s => attendance[s.id]);
+                const absentList  = students.filter(s => !attendance[s.id]);
+                return (
+                  <div className="border-t border-gray-100 p-4 space-y-3">
+                    <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      Attendance saved — {presentList.length} Present, {absentList.length} Absent
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                        <p className="text-xs font-bold text-green-700 mb-2">✓ Present ({presentList.length})</p>
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {presentList.map(s => (
+                            <p key={s.id} className="text-xs text-green-800"><span className="font-mono text-green-600">{s.studentUniqueId || `Roll ${s.rollNo}`}</span> — {s.name}</p>
+                          ))}
+                          {presentList.length === 0 && <p className="text-xs text-green-400 italic">None</p>}
+                        </div>
+                      </div>
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                        <p className="text-xs font-bold text-red-700 mb-2">✗ Absent ({absentList.length})</p>
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {absentList.map(s => (
+                            <p key={s.id} className="text-xs text-red-800"><span className="font-mono text-red-600">{s.studentUniqueId || `Roll ${s.rollNo}`}</span> — {s.name}</p>
+                          ))}
+                          {absentList.length === 0 && <p className="text-xs text-red-400 italic">None</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </>

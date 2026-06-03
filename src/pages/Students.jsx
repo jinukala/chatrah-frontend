@@ -21,34 +21,29 @@ export default function Students() {
   const [form, setForm] = useState({ name: '', fatherName: '', motherName: '', rollNo: '', gender: '', dateOfBirth: '', parentMobile: '', email: '', classId: '', isHosteller: false, isTransportUser: false, iitNeetOpted: false, feeConcession: '' });
 
   useEffect(() => { fetchClasses(); }, []);
-  useEffect(() => { if (filterClass !== '') fetchStudents(); }, [filterClass, page, search, sortBy, sortDir]);
-
-  const fetchStudents = async () => {
-    try {
-      const url = filterClass
-        ? `/students?classId=${filterClass}`
-        : `/students?page=${page}&size=${pageSize}&search=${encodeURIComponent(search)}&sortBy=${sortBy}&sortDir=${sortDir}`;
-      const res = await api.get(url);
-      setStudents(res.data);
-      const total = res.headers['x-total-count'];
-      if (total) setTotalCount(Number(total));
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
+  useEffect(() => { fetchStudents(); }, [filterClass, page, search, sortBy, sortDir]);
 
   const fetchClasses = async () => {
     try {
       const res = await api.get('/classes');
       setClasses(res.data);
-      // Auto-select teacher's class
       if (isTeacher && user?.teacherId) {
         const myClass = res.data.find(c => c.classTeacherId === user.teacherId);
         if (myClass) setFilterClass(String(myClass.id));
-        else setLoading(false);
-      } else {
-        setFilterClass('');
-        setLoading(false);
       }
-    } catch (e) { setLoading(false); }
+    } catch (e) {}
+  };
+
+  const fetchStudents = async () => {
+    setLoading(true);
+    try {
+      const classParam = filterClass ? `&classId=${filterClass}` : '';
+      const url = `/students?page=${page}&size=${pageSize}&search=${encodeURIComponent(search)}&sortBy=${sortBy}&sortDir=${sortDir}${classParam}`;
+      const res = await api.get(url);
+      setStudents(res.data);
+      const total = res.headers['x-total-count'];
+      if (total) setTotalCount(Number(total));
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
   const handleSubmit = async (e) => {
@@ -96,21 +91,24 @@ export default function Students() {
         </div>
       </div>
 
-      {/* Search & Sort */}
-      {!filterClass && (
-        <div className="flex flex-wrap gap-3 mb-4">
-          <input placeholder="🔍 Search by name or roll..." value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
-            className="flex-1 min-w-[200px] px-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#7b1113] outline-none" />
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-xl text-sm">
-            <option value="name">Sort by Name</option>
-            <option value="rollNo">Sort by Roll No</option>
-            <option value="createdAt">Sort by Date Added</option>
-          </select>
-          <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} className="px-3 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50">
-            {sortDir === 'asc' ? '↑ A-Z' : '↓ Z-A'}
-          </button>
-        </div>
-      )}
+      {/* Search & Sort — always visible */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <input
+          placeholder="Search by name, roll no, or SVV ID..."
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(0); }}
+          className="flex-1 min-w-[220px] px-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#7b1113] outline-none"
+        />
+        <select value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(0); }} className="px-3 py-2 border border-gray-200 rounded-xl text-sm">
+          <option value="name">Sort: Name</option>
+          <option value="rollNo">Sort: Roll No</option>
+          <option value="studentUniqueId">Sort: Student ID</option>
+          <option value="classRoom">Sort: Class</option>
+        </select>
+        <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} className="px-3 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50 font-medium">
+          {sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}
+        </button>
+      </div>
 
       {showForm && (
         <div className="bg-white border border-[#7b1113]/10 rounded-xl shadow-sm p-6 mb-6">
@@ -155,6 +153,7 @@ export default function Students() {
         <table className="w-full text-sm">
           <thead className="bg-[#7b1113]/5 border-b border-[#7b1113]/10">
             <tr>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">ID</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Father</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Class</th>
@@ -165,9 +164,10 @@ export default function Students() {
           </thead>
           <tbody>
             {students.length === 0 ? (
-              <tr><td colSpan="6" className="text-center py-8 text-gray-400">No students found</td></tr>
+              <tr><td colSpan="7" className="text-center py-8 text-gray-400">No students found</td></tr>
             ) : students.map(s => (
               <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="px-4 py-3 text-xs text-gray-400 font-mono">{s.studentUniqueId || '—'}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
                 <td className="px-4 py-3 text-gray-600">{s.fatherName}</td>
                 <td className="px-4 py-3 text-gray-600">{s.className}{s.section ? ` - ${s.section}` : ''}</td>
@@ -182,13 +182,13 @@ export default function Students() {
           </tbody>
         </table>
       </div>
-      {/* Pagination */}
-      {!filterClass && totalCount > pageSize && (
+      {/* Pagination — always show when there's data */}
+      {totalCount > pageSize && (
         <div className="flex items-center justify-between mt-4">
-          <p className="text-xs text-gray-500">Showing {page * pageSize + 1}-{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}</p>
+          <p className="text-xs text-gray-500">Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}</p>
           <div className="flex gap-2">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40">Previous</button>
-            <button disabled={(page + 1) * pageSize >= totalCount} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40">Next</button>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50">← Previous</button>
+            <button disabled={(page + 1) * pageSize >= totalCount} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50">Next →</button>
           </div>
         </div>
       )}

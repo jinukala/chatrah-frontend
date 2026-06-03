@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Users, BookOpen, ClipboardList, DollarSign, FileText, Send, Loader2 } from 'lucide-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Users, BookOpen, ClipboardList, DollarSign, FileText, Send, Loader2, UserPlus, Database, RefreshCw, ShieldCheck, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -13,136 +12,243 @@ export default function Dashboard() {
 
 function AdminDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ students: 0, teachers: 0, classes: 0, pendingLeaves: 0 });
-  const [recentLeaves, setRecentLeaves] = useState([]);
+  const [stats, setStats] = useState({ students: 0, teachers: 0, classes: 0 });
+  const [pendingLeaves, setPendingLeaves] = useState([]);
+  const [pendingBlogs, setPendingBlogs] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Create user form
+  const [userForm, setUserForm] = useState({ username: '', password: '', role: 'PRINCIPAL' });
+  const [userMsg, setUserMsg] = useState('');
+  const [userErr, setUserErr] = useState('');
+  const [userLoading, setUserLoading] = useState(false);
+
+  // Cache state
+  const [cacheMsg, setCacheMsg] = useState('');
+  const [cacheLoading, setCacheLoading] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        const [studRes, teachRes, classRes, leavesRes, blogsRes] = await Promise.all([
-          api.get('/students').catch(() => ({ data: [] })),
-          api.get('/teachers').catch(() => ({ data: [] })),
-          api.get('/classes').catch(() => ({ data: [] })),
-          api.get('/leaves/pending').catch(() => ({ data: [] })),
-          api.get('/blogs/pending').catch(() => ({ data: [] })),
-        ]);
-        // Build class-wise real student count
-        const classData = await Promise.all(classRes.data.map(async c => {
-          const s = await api.get(`/classes/${c.id}/students`).then(r => r.data.length).catch(() => 0);
-          return { name: `${c.className}-${c.section}`, students: s };
-        }));
-        // Get today's attendance across all classes
-        const today = new Date().toISOString().split('T')[0];
-        let totalPresent = 0, totalAbsent = 0;
-        for (const c of classRes.data.slice(0, 5)) {
-          try { const att = await api.get(`/attendance/class/${c.id}?date=${today}`); totalPresent += att.data.filter(a => a.present).length; totalAbsent += att.data.filter(a => !a.present).length; } catch(e) {}
-        }
-        setStats({ students: studRes.data.length, teachers: teachRes.data.length, classes: classRes.data.length, pendingLeaves: leavesRes.data.length, pendingBlogs: blogsRes.data.length, classData, totalPresent, totalAbsent });
-        setRecentLeaves(leavesRes.data.slice(0, 5));
-      } catch (e) {}
+      const [studRes, teachRes, classRes, leavesRes, blogsRes] = await Promise.all([
+        api.get('/students').catch(() => ({ data: [] })),
+        api.get('/teachers').catch(() => ({ data: [] })),
+        api.get('/classes').catch(() => ({ data: [] })),
+        api.get('/leaves/pending').catch(() => ({ data: [] })),
+        api.get('/blogs/pending').catch(() => ({ data: [] })),
+      ]);
+      setStats({ students: studRes.data.length, teachers: teachRes.data.length, classes: classRes.data.length });
+      setPendingLeaves(leavesRes.data.slice(0, 5));
+      setPendingBlogs(blogsRes.data.slice(0, 5));
       setLoading(false);
     };
     fetchData();
   }, []);
 
+  const createUser = async (e) => {
+    e.preventDefault(); setUserErr(''); setUserMsg(''); setUserLoading(true);
+    try {
+      await api.post('/auth/create-user', userForm);
+      setUserMsg(`User "${userForm.username}" created as ${userForm.role}`);
+      setUserForm({ username: '', password: '', role: 'PRINCIPAL' });
+    } catch (e) { setUserErr(e.response?.data?.message || 'Failed to create user'); }
+    finally { setUserLoading(false); }
+  };
+
+  const clearCache = async (endpoint, label) => {
+    setCacheLoading(label); setCacheMsg('');
+    try {
+      await api.post(`/cache/clear/${endpoint}`);
+      setCacheMsg(`${label} cache cleared`);
+    } catch (e) { setCacheMsg('Failed to clear cache'); }
+    finally { setCacheLoading(''); }
+  };
+
+  const approveBlog = async (id) => {
+    await api.put(`/blogs/${id}/approve`).catch(() => {});
+    setPendingBlogs(prev => prev.filter(b => b.id !== id));
+  };
+  const rejectBlog = async (id) => {
+    await api.put(`/blogs/${id}/reject`).catch(() => {});
+    setPendingBlogs(prev => prev.filter(b => b.id !== id));
+  };
+  const approveLeave = async (id) => {
+    await api.put(`/leaves/${id}/approve`, {}).catch(() => {});
+    setPendingLeaves(prev => prev.filter(l => l.id !== id));
+  };
+  const rejectLeave = async (id) => {
+    await api.put(`/leaves/${id}/reject`, {}).catch(() => {});
+    setPendingLeaves(prev => prev.filter(l => l.id !== id));
+  };
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-[#7b1113]" /></div>;
 
   return (
-    <div>
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-[#7b1113] to-[#5c0d0f] rounded-2xl p-6 mb-6 text-white relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4"></div>
-        <div className="absolute bottom-0 left-1/2 w-32 h-32 bg-[#d4a017]/10 rounded-full translate-y-1/2"></div>
-        <h1 className="text-2xl font-bold relative">Welcome, {user?.displayName || 'Admin'}!</h1>
-        <p className="text-white/70 mt-1 relative">Chatrah School — Admin Dashboard</p>
-        <p className="text-white/50 text-xs mt-2 relative">{new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-      </div>
-
-      {/* Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-2xl border border-[#7b1113]/10 shadow-sm p-5">
-          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mb-3"><Users className="w-5 h-5 text-blue-600" /></div>
-          <p className="text-2xl font-bold text-gray-900">{stats.students}</p>
-          <p className="text-xs text-gray-500">Total Students</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-[#7b1113] to-[#5c0d0f] rounded-2xl p-6 text-white flex items-center gap-4">
+        <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
+          <ShieldCheck className="w-7 h-7" />
         </div>
-        <div className="bg-white rounded-2xl border border-[#7b1113]/10 shadow-sm p-5">
-          <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mb-3"><Users className="w-5 h-5 text-green-600" /></div>
-          <p className="text-2xl font-bold text-gray-900">{stats.teachers}</p>
-          <p className="text-xs text-gray-500">Total Teachers</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#7b1113]/10 shadow-sm p-5">
-          <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mb-3"><BookOpen className="w-5 h-5 text-purple-600" /></div>
-          <p className="text-2xl font-bold text-gray-900">{stats.classes}</p>
-          <p className="text-xs text-gray-500">Total Classes</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#7b1113]/10 shadow-sm p-5 relative">
-          {stats.pendingBlogs > 0 && <div className="absolute top-3 right-3 w-3 h-3 bg-orange-400 rounded-full animate-pulse"></div>}
-          <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center mb-3"><Send className="w-5 h-5 text-orange-600" /></div>
-          <p className="text-2xl font-bold text-gray-900">{stats.pendingBlogs}</p>
-          <p className="text-xs text-gray-500">Pending Blogs</p>
+        <div>
+          <h1 className="text-xl font-bold">System Admin — {user?.displayName || 'sysadmin'}</h1>
+          <p className="text-white/60 text-sm mt-0.5">{new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
       </div>
 
-      {/* Charts */}
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Students', value: stats.students, icon: Users, color: 'blue' },
+          { label: 'Teachers', value: stats.teachers, icon: Users, color: 'green' },
+          { label: 'Classes', value: stats.classes, icon: BookOpen, color: 'purple' },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className={`w-9 h-9 bg-${color}-100 rounded-lg flex items-center justify-center mb-3`}>
+              <Icon className={`w-4 h-4 text-${color}-600`} />
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{value}</p>
+            <p className="text-xs text-gray-500">{label}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Attendance Pie Chart */}
-        <div className="bg-white border border-[#7b1113]/10 rounded-2xl shadow-sm p-5">
-          <h3 className="font-semibold text-[#7b1113] mb-4">Today's School Attendance</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={[{name:'Present', value: stats.totalPresent || 0}, {name:'Absent', value: stats.totalAbsent || 0}]} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`}>
-                  <Cell fill="#22c55e" /><Cell fill="#ef4444" />
-                </Pie>
-                <Tooltip /><Legend />
-              </PieChart>
-            </ResponsiveContainer>
+        {/* Create User */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <UserPlus className="w-5 h-5 text-[#7b1113]" />
+            <h2 className="font-semibold text-gray-900">Create User</h2>
           </div>
+          {userErr && <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">{userErr}</div>}
+          {userMsg && <div className="mb-3 p-2 bg-green-50 border border-green-200 text-green-700 text-xs rounded-lg flex items-center gap-1"><CheckCircle className="w-3 h-3" />{userMsg}</div>}
+          <form onSubmit={createUser} className="space-y-3">
+            <input placeholder="Username" required value={userForm.username} onChange={e => setUserForm({ ...userForm, username: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#7b1113] outline-none" />
+            <input placeholder="Password" type="password" required value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#7b1113] outline-none" />
+            <select value={userForm.role} onChange={e => setUserForm({ ...userForm, role: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#7b1113] outline-none">
+              <option value="PRINCIPAL">Principal</option>
+              <option value="CLERK">Clerk</option>
+              <option value="SYS_ADMIN">System Admin</option>
+            </select>
+            <button type="submit" disabled={userLoading}
+              className="w-full py-2.5 bg-[#7b1113] text-white rounded-lg text-sm font-medium hover:bg-[#5c0d0f] disabled:opacity-50 flex items-center justify-center gap-2">
+              {userLoading && <Loader2 className="w-4 h-4 animate-spin" />} Create User
+            </button>
+          </form>
         </div>
 
-        {/* Class-wise Bar Chart */}
-        <div className="bg-white border border-[#7b1113]/10 rounded-2xl shadow-sm p-5">
-          <h3 className="font-semibold text-[#7b1113] mb-4">Students per Class</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.classData || []}>
-                <XAxis dataKey="name" tick={{fontSize: 11}} /><YAxis /><Tooltip />
-                <Bar dataKey="students" fill="#7b1113" radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        {/* Cache Management */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Database className="w-5 h-5 text-[#7b1113]" />
+            <h2 className="font-semibold text-gray-900">Cache Management</h2>
+          </div>
+          {cacheMsg && <div className="mb-3 p-2 bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg">{cacheMsg}</div>}
+          <div className="space-y-2">
+            {[
+              { key: 'all', label: 'All Caches' },
+              { key: 'fee', label: 'Fee Summary' },
+              { key: 'attendance', label: 'Attendance' },
+              { key: 'class-students', label: 'Class Students' },
+              { key: 'school-profile', label: 'School Profile' },
+            ].map(({ key, label }) => (
+              <button key={key} onClick={() => clearCache(key, label)} disabled={!!cacheLoading}
+                className="w-full flex items-center justify-between px-4 py-2.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50">
+                <span className="text-gray-700">{label}</span>
+                {cacheLoading === label
+                  ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                  : <RefreshCw className="w-4 h-4 text-gray-400" />}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Recent Leaves */}
-      {recentLeaves.length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-[#7b1113] mb-3 flex items-center gap-2">
-            <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></span>Pending Leave Requests
-          </h2>
-          <div className="bg-white border border-[#7b1113]/10 rounded-2xl shadow-sm overflow-hidden">
-            {recentLeaves.length === 0 ? (
-              <p className="text-center py-8 text-gray-400">No pending leave requests 🎉</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-[#7b1113]/5"><tr><th className="text-left px-4 py-3 text-gray-600">Student</th><th className="text-left px-4 py-3 text-gray-600">Class</th><th className="text-left px-4 py-3 text-gray-600">From</th><th className="text-left px-4 py-3 text-gray-600">To</th><th className="text-left px-4 py-3 text-gray-600">Reason</th></tr></thead>
-                <tbody>
-                  {recentLeaves.map(l => (
-                    <tr key={l.id} className="border-t border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium">{l.studentName}</td>
-                      <td className="px-4 py-3 text-gray-500">{l.className}-{l.section}</td>
-                      <td className="px-4 py-3">{l.fromDate}</td>
-                      <td className="px-4 py-3">{l.toDate}</td>
-                      <td className="px-4 py-3 text-gray-500">{l.reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+      {/* Pending Leaves */}
+      <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+          {pendingLeaves.length > 0 && <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse" />}
+          <h2 className="font-semibold text-gray-900">Pending Leave Requests</h2>
+          <span className="ml-auto text-xs text-gray-400">{pendingLeaves.length} pending</span>
         </div>
-      )}
+        {pendingLeaves.length === 0 ? (
+          <p className="text-center py-8 text-sm text-gray-400">No pending leave requests</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="text-left px-4 py-3 text-gray-500 font-medium">Student</th>
+                <th className="text-left px-4 py-3 text-gray-500 font-medium">Class</th>
+                <th className="text-left px-4 py-3 text-gray-500 font-medium">Dates</th>
+                <th className="text-left px-4 py-3 text-gray-500 font-medium">Reason</th>
+                <th className="text-center px-4 py-3 text-gray-500 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingLeaves.map(l => (
+                <tr key={l.id} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium">{l.studentName}</td>
+                  <td className="px-4 py-3 text-gray-500">{l.className}-{l.section}</td>
+                  <td className="px-4 py-3 text-gray-500">{l.fromDate} → {l.toDate}</td>
+                  <td className="px-4 py-3 text-gray-500">{l.reason}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 justify-center">
+                      <button onClick={() => approveLeave(l.id)} className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium hover:bg-green-200">
+                        <CheckCircle className="w-3 h-3" /> Approve
+                      </button>
+                      <button onClick={() => rejectLeave(l.id)} className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200">
+                        <XCircle className="w-3 h-3" /> Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Pending Blogs */}
+      <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+          {pendingBlogs.length > 0 && <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse" />}
+          <h2 className="font-semibold text-gray-900">Pending Blog Approvals</h2>
+          <span className="ml-auto text-xs text-gray-400">{pendingBlogs.length} pending</span>
+        </div>
+        {pendingBlogs.length === 0 ? (
+          <p className="text-center py-8 text-sm text-gray-400">No pending blog approvals</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="text-left px-4 py-3 text-gray-500 font-medium">Title</th>
+                <th className="text-left px-4 py-3 text-gray-500 font-medium">Author</th>
+                <th className="text-center px-4 py-3 text-gray-500 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingBlogs.map(b => (
+                <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium">{b.title}</td>
+                  <td className="px-4 py-3 text-gray-500">{b.authorName || b.author || '—'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 justify-center">
+                      <button onClick={() => approveBlog(b.id)} className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium hover:bg-green-200">
+                        <CheckCircle className="w-3 h-3" /> Approve
+                      </button>
+                      <button onClick={() => rejectBlog(b.id)} className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200">
+                        <XCircle className="w-3 h-3" /> Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
@@ -264,7 +370,7 @@ function TeacherDashboard() {
               <tbody>
                 {students.map(s => (
                   <tr key={s.id} className="border-b border-gray-100">
-                    <td className="px-4 py-3">{s.rollNo}</td>
+                    <td className="px-4 py-3">{s.studentUniqueId && <span className="font-mono text-xs text-gray-400 mr-1">{s.studentUniqueId} ·</span>}{s.rollNo}</td>
                     <td className="px-4 py-3 font-medium">{s.name}</td>
                     <td className="px-4 py-3">{s.fatherName}</td>
                     <td className="px-4 py-3">{s.parentMobile}</td>
@@ -336,7 +442,7 @@ function StudentDashboard() {
             <div className="flex items-center gap-3 mt-1 text-white/70 text-sm">
               {profile?.studentUniqueId && <span className="bg-white/20 px-2 py-0.5 rounded text-xs font-medium">{profile.studentUniqueId}</span>}
               {(profile?.className || feeSummary?.className) && <span>Class {profile?.className || feeSummary?.className} - {profile?.section || feeSummary?.section}</span>}
-              {profile?.rollNo && <span>Roll No: {profile.rollNo}</span>}
+              {profile?.rollNo && <span>Roll No: {profile.rollNo}{profile?.studentUniqueId ? ` · ${profile.studentUniqueId}` : ''}</span>}
             </div>
           </div>
         </div>

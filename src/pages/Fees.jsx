@@ -234,7 +234,7 @@ function ManageFees() {
               {searchResults.length > 0 && (
                 <select onChange={e => { if (e.target.value) { const s = searchResults.find(x => String(x.id) === e.target.value); if (s) selectStudent(s); } }} className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1">
                   <option value="">Select Student</option>
-                  {searchResults.map(s => <option key={s.id} value={s.id}>{s.name} (Roll {s.rollNo})</option>)}
+                  {searchResults.map(s => <option key={s.id} value={s.id}>{s.name} ({s.studentUniqueId || `Roll ${s.rollNo}`})</option>)}
                 </select>
               )}
             </div>

@@ -95,7 +95,7 @@ export default function Profile() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {profile?.type === 'student' && (<>
           <InfoCard icon={BookOpen} label="Class" value={profile.className ? `Class ${profile.className} - ${profile.section}` : '—'} />
-          <InfoCard icon={GraduationCap} label="Roll No" value={profile.rollNo || '—'} />
+          <InfoCard icon={GraduationCap} label="Roll No" value={profile.rollNo ? `${profile.rollNo}${profile.studentUniqueId ? ` · ${profile.studentUniqueId}` : ''}` : '—'} />
           <InfoCard icon={Calendar} label="Date of Birth" value={profile.dateOfBirth || '—'} />
           <InfoCard icon={Calendar} label="Admission Date" value={profile.admissionDate || '—'} />
           <InfoCard icon={Phone} label="Mobile" value={profile.parentMobile || '—'} />
